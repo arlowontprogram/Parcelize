@@ -3,7 +3,7 @@
 	Title: Parcelize
 	Date: 29/05/2024
 	Created by: 110029109
-	Version: 1.0.0
+	Version: 1.1.0
 
 	--
 
@@ -159,6 +159,42 @@
 
 		```lua
 		local WasSuccessful, Response = ParcelInstance:Whitelist()
+
+		if WasSuccessful then
+			print("Successfully whitelisted!")
+		else
+			warn("Failed to whitelist:", Response.message)
+		end
+		```
+
+		-
+
+		ParcelInstance:UserExists(UserId: RobloxId) -> boolean?
+		- Checks whether or not the user exists on the Parcel API, given their RobloxId
+		- Returns a boolean, whether or not the user exists
+
+		```lua
+		local UserId = 110029109
+
+		if ParcelInstance:UserExists(UserId) then
+			print("User exists!")
+		else
+			warn("User does not exist!")
+		end
+		```
+
+		-
+
+		ParcelInstance:GiftWhitelist( Recipient: RobloxId, Purchaser: RobloxId, ProductId: ProductId )
+			-> ( boolean, { message: string, status: string }? )
+		- Whitelists the player to the desired product, given their RobloxId and the ProductId
+		- Returns a tuple, with the first value being a boolean, whether or not the request was successful
+		- Followed by table, which will be returned with two string keys: `message` and `status`
+
+		```lua
+		local WasSuccessful, Response = ParcelInstance:GiftWhitelist(
+			110029109, 1176889493, "eyJhbGciOiJIUzI1N"
+		)
 
 		if WasSuccessful then
 			print("Successfully whitelisted!")
@@ -511,6 +547,42 @@ function ParcelAPI:FetchPlayerProfile(UserId: RobloxId | DiscordId, ProvidedUser
 	return FormattedData
 end
 
+function ParcelAPI:UserExists(UserId: RobloxId): boolean?
+	assert(
+		UserId and typeof(UserId) == "number",
+		`[ParcelAPI]: Invalid UserId provided! Expected <number>, got <{typeof(UserId)}>`
+	)
+
+	local CachePath = `profilecheck.{tostring(UserId)}`
+	if self:_ShouldReturnCached("Players", CachePath) then
+		return self.Cache.Players[CachePath].Data
+	end
+
+	local RequestOk, Data = self:_Request(`external/hub/gift/check/{UserId}`)
+
+	if not RequestOk then
+		return
+	end
+
+	local Result = (tostring(Data.status):sub(1, 1) == "2")
+
+	self:_SetCache("Players", CachePath, Result)
+	return Result
+end
+
+function ParcelAPI:GiftWhitelist(Recipient: RobloxId, Purchaser: RobloxId, ProductId: ProductId): (boolean, string | {message: string, status: number})
+	-- hub/gift/complete
+	assert(
+		Recipient and Purchaser and ProductId,
+		`[ParcelAPI]: Invalid parameters passed while attempting to GiftWhitelist {Recipient}!`
+	)
+	return self:_Request(`external/hub/gift/complete`, "POST", {
+		recipientID = tonumber(Recipient),
+		buyerID = tonumber(Purchaser),
+		productID = tostring(ProductId)
+	}, true)
+end
+
 function ParcelAPI:Whitelist(UserId: RobloxId, ProductId: ProductId): (boolean, string | {message: string, status: number})
 	-- hub/order/complete
 	assert(
@@ -568,5 +640,7 @@ end :: (AuthString: string?, ForceDebugging: boolean?) -> {
 	FetchProducts: (self: ParcelAPI, GetBestseller: boolean?) -> HubProducts,
 	FetchPlayerOwnedProducts: (self: ParcelAPI, UserId: RobloxId) -> {Product?},
 	FetchPlayerProfile: (self: ParcelAPI, UserId: RobloxId | DiscordId, ProvidedUserType: UserType) -> PlayerProfile,
+	UserExists: (self: ParcelAPI, UserId: RobloxId) -> boolean,
+	GiftWhitelist: (self: ParcelAPI, Recipient: RobloxId, Purchaser: RobloxId, ProductId: ProductId) -> (boolean, string | {message: string, status: number}),
 	Whitelist: (self: ParcelAPI, UserId: RobloxId, ProductId: ProductId) -> (boolean, string | {message: string, status: number}),
 }
